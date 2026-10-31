@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Себестоимость блюд</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Unbounded:wght@500;600&display=swap">
+<style>
+/* Макет: один экран. Слева шаги 1–3 (блюдо, рецепт, сколько готовить) и «Дополнительно»; справа итог: что купить → себестоимость → цена. На телефоне одна колонка и нижняя полоса с суммой и ценой */
+:root{
+  --bg:#f3f5f1; --surface:#ffffff; --surface-2:#eef1ec; --line:#dde3da;
+  --fg:#1b241e; --muted:#5f6b63; --accent:#2f6b4f; --accent-soft:#e1efe6; --accent-fg:#ffffff;
+  --good:#1f7a4a; --bad:#b3362c; --warn:#9a5b00; --info:#2f5f8a;
+  --f-display:"Unbounded","Onest",system-ui,sans-serif;
+  --f-body:"Onest",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --r:16px; --r-sm:12px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121713; --surface:#1a211c; --surface-2:#222b25; --line:#2f3a32;
+  --fg:#e8eee9; --muted:#9aa89f; --accent:#6fc195; --accent-soft:#213a2c; --accent-fg:#0d1a12;
+  --good:#6fd39b; --bad:#ff8a7e; --warn:#f0b04a; --info:#8fb8e0; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121713; --surface:#1a211c; --surface-2:#222b25; --line:#2f3a32;
+  --fg:#e8eee9; --muted:#9aa89f; --accent:#6fc195; --accent-soft:#213a2c; --accent-fg:#0d1a12;
+  --good:#6fd39b; --bad:#ff8a7e; --warn:#f0b04a; --info:#8fb8e0; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+button,input,select{font:inherit;color:inherit}
+.num,input[type=number],input.dec{font-variant-numeric:tabular-nums}
+.wrap{max-width:1160px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 120px}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.top-in{max-width:1160px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px;display:flex;align-items:center;gap:10px}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0}
+.brand-mark{width:34px;height:34px;border-radius:10px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-family:var(--f-display);font-weight:600;flex:none}
+.brand h1{font-family:var(--f-display);font-weight:600;font-size:16px;margin:0}
+.saved{font-size:13px;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:9px 16px;font-weight:600;font-size:15px;cursor:pointer;min-height:44px;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.small{min-height:38px;padding:6px 13px;font-size:14px}
+.btn.link{border:none;background:none;color:var(--accent);padding:4px 0;min-height:0}
+.btn.danger{color:var(--bad)}
+.btn:focus-visible,input:focus-visible,select:focus-visible,.chip:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:24px;align-items:start;margin-top:20px}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.side{position:sticky;top:calc(env(safe-area-inset-top,0px) + 76px)}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px;min-width:0}
+.step-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px}
+.step-n{flex:none;width:32px;height:32px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:15px}
+.step h2{margin:3px 0 2px;font-size:18px;font-weight:700;text-wrap:balance}
+.step p.hint,.hint{margin:0;color:var(--muted);font-size:14px}
+input[type=text],input[type=number],select{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);padding:11px 12px;font-size:16px;min-height:46px;min-width:0}
+input:hover,select:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.lbl{display:block;font-size:13px;color:var(--muted);font-weight:600;margin-bottom:5px}
+.dish-pick{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.dish-name{margin-top:10px}
+
+/* строки рецепта */
+.rows{display:flex;flex-direction:column;gap:10px}
+.row{border:1px solid var(--line);border-radius:var(--r-sm);padding:12px;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.3fr) 96px 104px 40px;gap:8px;align-items:end}
+.row .lbl{min-height:18px}
+.del{width:40px;height:46px;border-radius:var(--r-sm);border:1px solid var(--line);background:transparent;cursor:pointer;color:var(--muted);font-size:20px}
+.del:hover{color:var(--bad);border-color:var(--bad)}
+.calc-line{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;font-size:13.5px;color:var(--muted)}
+.calc-line b{color:var(--fg);font-variant-numeric:tabular-nums}
+.calc-line .arrow{color:var(--line)}
+.tag{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px}
+.tag.norm{background:var(--accent-soft);color:var(--accent)}
+.tag.manual{background:color-mix(in srgb,var(--info) 14%,var(--surface));color:var(--info)}
+.tag.none{background:color-mix(in srgb,var(--warn) 14%,var(--surface));color:var(--warn)}
+.adv{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--surface-2);border-radius:var(--r-sm);padding:10px}
+.adv .lbl{min-height:0}
+.adv input{background:var(--surface)}
+.adv p{grid-column:1/-1;margin:0;font-size:12.5px;color:var(--muted)}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:9px 16px;font-weight:600;cursor:pointer;min-height:44px;font-variant-numeric:tabular-nums;font-size:15px}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.chips.sm .chip{min-height:38px;padding:6px 14px;font-size:14px}
+.target-row{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.target-row input{max-width:140px;font-size:20px;font-weight:600}
+.unit{font-weight:600;color:var(--muted)}
+.note{margin-top:12px;font-size:14px;color:var(--muted);background:var(--surface-2);border-radius:var(--r-sm);padding:10px 12px}
+.note b{color:var(--fg)}
+
+details.more{margin-top:12px;font-size:14px}
+details.more>summary{cursor:pointer;font-weight:600;color:var(--accent);padding:4px 0}
+.panel-adv{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:4px 20px}
+.panel-adv>summary{cursor:pointer;font-weight:700;font-size:16px;padding:14px 0;list-style-position:inside}
+.panel-adv[open]{padding-bottom:20px}
+.adv-grid{display:flex;flex-direction:column;gap:16px}
+.pack-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
+.pack-grid label{background:var(--surface-2);border-radius:var(--r-sm);padding:8px 10px;font-size:13px;color:var(--muted);font-weight:600}
+.pack-grid input{margin-top:4px;min-height:40px;padding:8px 10px}
+.field-row{display:flex;gap:10px;align-items:center}
+.field-row input{max-width:160px}
+
+/* итог */
+.res-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:0 0 10px}
+.res-h h3{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700}
+.res-sec+.res-sec{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r-sm)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14.5px}
+th,td{padding:9px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+th{font-size:12px;color:var(--muted);font-weight:600;background:var(--surface-2)}
+tbody tr:last-child td{border-bottom:none}
+tfoot td{font-weight:700;background:var(--surface-2);border-bottom:none}
+tr.sel td{background:var(--accent-soft);font-weight:700}
+#sizesTbl tr{cursor:pointer}
+.lines{border-top:1px solid var(--line)}
+.line{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:15px}
+.line span:first-child{color:var(--muted)}
+.line b{font-variant-numeric:tabular-nums}
+.line.total{border-bottom:none;font-size:17px}
+.line.total span:first-child{color:var(--fg);font-weight:700}
+.coef-row{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.coef-row input{max-width:110px;text-align:center;font-size:22px;font-weight:700}
+.step-btn{width:46px;height:46px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--surface);font-size:22px;font-weight:600;cursor:pointer}
+.step-btn:hover{border-color:var(--accent)}
+.answer{background:var(--accent);color:var(--accent-fg);border-radius:var(--r);padding:18px 20px;margin-top:14px}
+.answer small{display:block;font-size:14px;opacity:.85}
+.answer .price{font-family:var(--f-display);font-weight:500;font-size:clamp(32px,5.5vw,44px);line-height:1.1;margin:6px 0 4px;font-variant-numeric:tabular-nums}
+.answer .per{font-size:14px;opacity:.9}
+.profit{color:var(--good)}
+.profit.neg{color:var(--bad)}
+.warn{margin-top:12px;font-size:14px;border-radius:var(--r-sm);padding:10px 12px;background:color-mix(in srgb,var(--warn) 12%,var(--surface))}
+.gloss{color:var(--muted);margin:8px 0 0;display:flex;flex-direction:column;gap:7px;font-size:14px}
+.gloss b{color:var(--fg)}
+.gloss a{color:var(--accent)}
+
+.mbar{display:none}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 90px);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;z-index:30}
+
+@media (max-width:940px){.grid{grid-template-columns:1fr}.side{position:static}}
+@media (max-width:640px){
+  .brand h1{display:none}
+  .step{padding:16px}
+  .panel-adv{padding:2px 16px}
+  .row{grid-template-columns:1fr 1fr;background:var(--surface-2);border:none;position:relative}
+  .row .c-name{grid-column:1/-1;padding-right:48px}
+  .row .c-method{grid-column:1/-1}
+  .row .c-del{position:absolute;top:35px;right:12px}
+  .row input,.row select{background:var(--surface)}
+  .adv{background:var(--surface)}
+  #detailTbl th,#detailTbl td{padding:8px 6px;font-size:13px}
+  .mbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--surface);border-top:1px solid var(--line);padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));align-items:center;justify-content:space-between;gap:10px}
+  .mbar small{display:block;color:var(--muted);font-size:12px}
+  .mbar b{font-size:18px;font-variant-numeric:tabular-nums}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><div class="brand-mark">₸</div><h1>Себестоимость блюд</h1></div>
+    <span class="saved" id="savedNote">Всё сохраняется автоматически</span>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="grid">
+    <div class="col">
+      <section class="step">
+        <div class="step-head"><div class="step-n">1</div><div><h2>Выберите блюдо</h2><p class="hint">Или создайте новое.</p></div></div>
+        <div class="dish-pick">
+          <select id="dishSelect" aria-label="Блюдо"></select>
+          <button class="btn" id="btnNew" type="button">+ Новое</button>
+        </div>
+        <div class="dish-name">
+          <label class="lbl" for="dishName">Название</label>
+          <input type="text" id="dishName" placeholder="Например: Сладкая капуста">
+        </div>
+      </section>
+
+      <section class="step">
+        <div class="step-head"><div class="step-n">2</div><div><h2>Рецепт</h2><p class="hint">Сколько сырого продукта идёт в рецепт и как его готовят. Отходы и потери подставятся по нормам сами.</p></div></div>
+        <div class="rows" id="rows"></div>
+        <datalist id="prodList"></datalist>
+        <div class="foot">
+          <button class="btn small" id="addRow" type="button">+ Добавить продукт</button>
+          <span class="hint" id="yieldInfo"></span>
+        </div>
+      </section>
+
+      <section class="step">
+        <div class="step-head"><div class="step-n">3</div><div><h2>Сколько нужно приготовить?</h2><p class="hint">Готового блюда. Выберите размер или впишите свой вес.</p></div></div>
+        <div class="chips" id="tChips" role="group" aria-label="Нужный вес готового блюда"></div>
+        <div class="target-row"><input type="text" class="dec" id="target" inputmode="decimal" aria-label="Нужный вес в килограммах"><span class="unit">кг</span></div>
+      </section>
+
+      <details class="panel-adv" id="advPanel">
+        <summary>Дополнительно: выход, расходы, упаковка</summary>
+        <div class="adv-grid">
+          <div>
+            <label class="lbl" for="yieldOverride">Фактический выход рецепта, г</label>
+            <div class="field-row"><input type="number" id="yieldOverride" min="0" step="10" inputmode="decimal" placeholder="Авто"><span class="unit">г</span></div>
+            <p class="hint" style="margin-top:6px">Если взвесили готовое блюдо и вес отличается от расчётного — впишите его. Это точнее любых норм.</p>
+          </div>
+          <div>
+            <label class="lbl" for="other">Другие расходы на 1 кг готового блюда</label>
+            <div class="field-row"><input type="number" id="other" min="0" step="10" inputmode="decimal"><span class="unit">₸</span></div>
+            <p class="hint" style="margin-top:6px">Зарплата повара, свет, газ, вода, перчатки — в пересчёте на 1 кг.</p>
+          </div>
+          <div>
+            <span class="lbl">Упаковка: контейнер, крышка, наклейка, ₸ за 1 шт</span>
+            <div class="pack-grid" id="packGrid"></div>
+          </div>
+          <div>
+            <button class="btn small danger" id="btnDelete" type="button">Удалить это блюдо</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="panel-adv">
+        <summary>Что значат слова и откуда нормы</summary>
+        <div class="gloss">
+          <div><b>Брутто</b> — вес сырого продукта, как купили.</div>
+          <div><b>Отходы</b> — что уходит при чистке: кожура, кочерыжка, кости, скорлупа.</div>
+          <div><b>Нетто</b> — вес после чистки, до варки или жарки.</div>
+          <div><b>Потери при готовке</b> — уварка и ужарка, вес уменьшается. <b>Привар</b> — крупы и макароны впитывают воду, вес растёт.</div>
+          <div><b>Выход</b> — вес готового продукта или блюда.</div>
+          <div><b>Себестоимость</b> — во сколько вам обходится блюдо: продукты + другие расходы + упаковка.</div>
+          <div><b>Цена продажи = себестоимость × коэффициент ценообразования.</b> Себестоимость 1 000 ₸ и коэффициент 2,5 — цена 2 500 ₸.</div>
+          <div style="margin-top:6px"><b>Откуда нормы.</b> Отходы овощей по сезонам — из таблиц Сборника рецептур блюд для общепита. Потери при варке и жарке мяса, птицы, рыбы, овощей и выход каш — из приложения 6 к приказу ФСИН России № 696 от 02.09.2016 (документ утратил силу, нормы взяты из сборников рецептур). Отходы томатов, чеснока, мяса, яиц — оттуда же и из таблицы отходов Минздрава СССР 1985 года. Птица, рыба, яйца, колбасы — из справочника программы «Меню-раскладка». Нормы ориентировочные: реальные отходы зависят от качества продукта. Самый точный способ — один раз взвесить до и после.</div>
+        </div>
+      </details>
+    </div>
+
+    <aside class="col side">
+      <section class="step">
+        <div class="res-sec">
+          <div class="res-h"><h3>Что купить</h3><span class="hint" id="buyFor"></span></div>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>Продукт</th><th>Купить</th><th>Стоимость</th></tr></thead>
+            <tbody id="buyTbl"></tbody>
+            <tfoot><tr><td>Итого продукты</td><td></td><td id="buyTotal">0 ₸</td></tr></tfoot>
+          </table></div>
+          <details class="more">
+            <summary>Подробно: чистка и готовка</summary>
+            <div class="tbl-wrap" style="margin-top:8px"><table id="detailTbl">
+              <thead><tr><th>Продукт</th><th>Брутто</th><th>Отходы</th><th>Нетто</th><th>Готовка</th><th>Выход</th></tr></thead>
+              <tbody id="detailBody"></tbody>
+            </table></div>
+          </details>
+        </div>
+
+        <div class="res-sec">
+          <div class="res-h"><h3>Себестоимость</h3><span class="hint" id="costFor"></span></div>
+          <div class="lines">
+            <div class="line"><span>Продукты</span><b id="cProducts">0 ₸</b></div>
+            <div class="line"><span>Другие расходы</span><b id="cOther">0 ₸</b></div>
+            <div class="line" id="cPackRow"><span>Упаковка</span><b id="cPack">0 ₸</b></div>
+            <div class="line total"><span>Себестоимость</span><b id="cTotal">0 ₸</b></div>
+          </div>
+          <p class="hint" id="perKg" style="margin-top:4px"></p>
+        </div>
+
+        <div class="res-sec">
+          <div class="res-h"><h3>Цена продажи</h3></div>
+          <label class="lbl" for="coef" style="color:var(--fg);font-size:14px;font-weight:700">Коэффициент ценообразования</label>
+          <div class="coef-row">
+            <button class="step-btn" type="button" id="coefMinus" aria-label="Уменьшить коэффициент на 0,1">−</button>
+            <input type="text" class="dec" id="coef" inputmode="decimal" autocomplete="off">
+            <button class="step-btn" type="button" id="coefPlus" aria-label="Увеличить коэффициент на 0,1">+</button>
+          </div>
+          <div class="chips sm" id="coefChips" role="group" aria-label="Быстрый выбор коэффициента"></div>
+          <p class="hint" id="coefWords" style="margin-top:8px"></p>
+          <div class="answer">
+            <small id="ansLabel">Цена продажи</small>
+            <div class="price" id="ansPrice">0 ₸</div>
+            <div class="per" id="ansProfit"></div>
+          </div>
+          <div class="warn" id="warn" hidden></div>
+          <details class="more">
+            <summary>Цены на все размеры упаковки</summary>
+            <div class="tbl-wrap" style="margin-top:8px"><table>
+              <thead><tr><th>Размер</th><th>Себестоимость</th><th>Цена</th><th>Прибыль</th></tr></thead>
+              <tbody id="sizesTbl"></tbody>
+            </table></div>
+          </details>
+        </div>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<div class="mbar" aria-live="polite">
+  <div><small>Продукты купить на</small><b id="mBuy">0 ₸</b></div>
+  <div style="text-align:right"><small id="mLabel">Цена</small><b id="mPrice">0 ₸</b></div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+/* ================= НОРМЫ ================= */
+/* c — изменение веса при тепловой обработке, % от нетто: минус — потери, плюс — привар.
+   Источники: SR — сезонные нормы отходов овощей (Сборник рецептур блюд для общепита);
+   FS — приказ ФСИН России № 696 от 02.09.2016, прил. 6 (утратил силу, нормы из сборников рецептур);
+   MZ — Минздрав СССР 05.07.1985 № 11-14/24-6, прил. 10; MR — справочник «Меню-раскладка» (progman-soft.ru). */
+const month=new Date().getMonth()+1;
+const potatoWaste=m=>m>=9&&m<=10?{v:25,s:"сентябрь–октябрь"}:m>=11?{v:30,s:"ноябрь–декабрь"}:m<=2?{v:35,s:"январь–февраль"}:{v:40,s:"с 1 марта"};
+const rootWaste=m=>m>=9?{v:20,s:"сентябрь–декабрь"}:{v:25,s:"с 1 января"};
+const P=[
+ {n:"Картофель",k:["картоф","картош"],w:()=>potatoWaste(month),m:[["Жарка из сырого",-31],["Тушение, рагу",-20]]},
+ {n:"Картофель молодой",k:["молодой картоф"],w:()=>({v:20,s:"до 1 сентября"}),m:[["Жарка из сырого",-31],["Тушение, рагу",-20]]},
+ {n:"Морковь",k:["морков"],w:()=>rootWaste(month),m:[["Варка, припускание (нарезанная)",-8],["Пассерование",-32]]},
+ {n:"Морковь молодая с ботвой",k:["морковь молод","молодая морков"],w:()=>({v:50}),m:[["Варка, припускание (нарезанная)",-8],["Пассерование",-32]]},
+ {n:"Свёкла",k:["свекл","свёкл"],w:()=>rootWaste(month),m:[["Варка целиком",-5],["Варка, припускание (нарезанная)",-8],["Пассерование",-38]]},
+ {n:"Лук репчатый",k:["лук реп","лук"],x:["порей"],w:()=>({v:16}),m:[["Пассерование",-38]]},
+ {n:"Лук зелёный",k:["лук зел","зелёный лук","зеленый лук"],w:()=>({v:20}),m:[["Пассерование",-35]]},
+ {n:"Капуста белокочанная",k:["капуст"],x:["цветн","брокк","пекин","морск"],w:()=>({v:20}),m:[["Тушение",-21]]},
+ {n:"Капуста квашеная",k:["квашен"],w:()=>({v:30}),m:[["Тушение",-15]]},
+ {n:"Капуста краснокочанная",k:["краснокоч"],w:()=>({v:15}),m:[]},
+ {n:"Капуста савойская",k:["савойск"],w:()=>({v:22}),m:[]},
+ {n:"Капуста кольраби",k:["кольраби"],w:()=>({v:35}),m:[]},
+ {n:"Тыква",k:["тыкв"],w:()=>({v:30}),m:[["Варка, припускание",-17]]},
+ {n:"Перец сладкий",k:["перец","перц"],x:["молот","черн","горош","чили","остр"],w:()=>({v:25}),m:[]},
+ {n:"Огурцы свежие",k:["огур"],w:()=>({v:5}),m:[]},
+ {n:"Огурцы солёные (очищенные)",k:["огурцы солён","огурцы солен","солёные огур","соленые огур"],w:()=>({v:20}),m:[]},
+ {n:"Томаты (помидоры) свежие",k:["томат","помидор"],x:["паст","соус","сок"],w:()=>({v:5}),m:[]},
+ {n:"Чеснок",k:["чеснок"],w:()=>({v:22}),m:[]},
+ {n:"Кабачки (без кожицы)",k:["кабач"],w:()=>({v:20}),m:[]},
+ {n:"Баклажаны (очищенные)",k:["баклаж"],w:()=>({v:15}),m:[]},
+ {n:"Редис с ботвой",k:["редис"],w:()=>({v:37}),m:[]},
+ {n:"Салат листовой",k:["салат лист","листовой салат","латук"],w:()=>({v:28}),m:[]},
+ {n:"Шпинат",k:["шпинат"],w:()=>({v:26}),m:[]},
+ {n:"Щавель",k:["щавел"],w:()=>({v:24}),m:[]},
+ {n:"Фасоль стручковая",k:["стручков"],w:()=>({v:10}),m:[]},
+ {n:"Говядина на кости (1 категория)",k:["говядина на кост"],w:()=>({v:26}),m:[["Варка крупным куском",-37.8],["Тушение",-40.5],["Жарка крупным куском",-35.1],["Жарка порционными или мелкими кусками",-36.5]]},
+ {n:"Говядина без кости (мякоть, вырезка)",k:["говяд"],x:["тушенк","тушёнк","консерв","фарш"],w:()=>({v:15}),m:[["Варка крупным куском",-37.8],["Тушение",-40.5],["Жарка крупным куском",-35.1],["Жарка порционными или мелкими кусками",-36.5]]},
+ {n:"Свинина мясная",k:["свинин"],w:()=>({v:14}),m:[["Варка крупным куском",-39.5],["Жарка, тушение",-32.6]]},
+ {n:"Баранина (1 категория)",k:["баран"],w:()=>({v:28}),m:[["Варка крупным куском",-36.1],["Жарка, тушение крупными или порционными кусками",-37.5],["Тушение мелкими кусками",-30.6]]},
+ {n:"Курица потрошёная (тушка)",k:["куриц","куры","цыпл"],w:()=>({v:11.5}),m:[["Варка тушкой",-28.1],["Жарка",-31.5],["Тушение кусками",-31.5]]},
+ {n:"Куриное филе",k:["филе кур","куриное филе","филе куриное"],w:()=>null,m:[["Припускание",-27],["Тушение кусками",-27]]},
+ {n:"Минтай неразделанный",k:["минтай"],w:()=>({v:40}),m:[["Варка, припускание",-18.3],["Жарка",-18.5]]},
+ {n:"Минтай филе с кожей",k:["филе минта","минтай филе"],w:()=>null,m:[["Варка, припускание",-20],["Жарка",-16.4]]},
+ {n:"Горбуша потрошёная с головой",k:["горбуш"],w:()=>({v:19}),m:[["Варка, припускание",-20],["Жарка",-20]]},
+ {n:"Скумбрия атлантическая неразделанная",k:["скумбри"],w:()=>({v:34}),m:[["Варка",-20],["Припускание",-18.5],["Жарка",-20]]},
+ {n:"Окунь морской потрошёный с головой",k:["окун"],w:()=>({v:36}),m:[["Варка",-20],["Жарка",-20]]},
+ {n:"Яйца куриные",k:["яйц"],x:["перепел"],w:()=>({v:12}),m:[["Варка в скорлупе",0],["Омлет запечённый",-10],["Омлет на пару",-8]]},
+ {n:"Колбаса варёная",k:["колбас"],x:["копч","салями"],w:()=>({v:3}),m:[]},
+ {n:"Сосиски, сардельки",k:["сосис","сардел"],w:()=>({v:2.5}),m:[["Варка",0]]},
+ {n:"Рис",k:["рис"],w:()=>({v:1}),m:[["Каша рассыпчатая",180],["Каша вязкая",350]]},
+ {n:"Гречка",k:["греч"],w:()=>({v:1}),m:[["Каша рассыпчатая",110],["Каша вязкая",300]]},
+ {n:"Пшено",k:["пшен"],w:()=>({v:1}),m:[["Каша рассыпчатая",150],["Каша вязкая",300]]},
+ {n:"Перловка",k:["перлов"],w:()=>({v:1}),m:[["Каша рассыпчатая",200],["Каша вязкая",350]]},
+ {n:"Овсяная крупа",k:["овсян"],w:()=>({v:1}),m:[["Каша вязкая",300]]},
+ {n:"Манная крупа",k:["манн"],w:()=>({v:1}),m:[["Каша вязкая",350]]},
+ {n:"Макароны",k:["макарон","спагетти"],w:()=>null,m:[["Варка с откидыванием",150]]},
+ {n:"Горох",k:["горох"],x:["консерв"],w:()=>({v:0.5}),m:[["Варка для пюре",110]]}
+];
+const norm=s=>String(s||"").toLowerCase().replace(/ё/g,"е").trim();
+function findProduct(name){
+  const n=norm(name);if(!n)return null;
+  const exact=P.find(p=>norm(p.n)===n);if(exact)return exact;
+  let best=null,len=0;
+  for(const p of P)for(const k of p.k){const kk=norm(k);if(n.includes(kk)&&kk.length>len){best=p;len=kk.length;}}
+  if(best&&best.x&&best.x.some(x=>n.includes(norm(x))))return null;
+  return best;
+}
+
+/* ================= ОБЩЕЕ ================= */
+const SIZES=[75,100,250,350,400,500,1000];
+const KEY="foodcost.v3",OLD="foodcost.v2";
+const uid=()=>Math.random().toString(36).slice(2,10);
+const $=s=>document.querySelector(s);
+const nf=new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0});
+const nf1=new Intl.NumberFormat("ru-RU",{maximumFractionDigits:1});
+const nf2=new Intl.NumberFormat("ru-RU",{maximumFractionDigits:2});
+const nf3=new Intl.NumberFormat("ru-RU",{maximumFractionDigits:3});
+const money=v=>(isFinite(v)?nf.format(Math.round(v)):"—")+" ₸";
+const num=v=>{const n=parseFloat(String(v??"").replace(/\s/g,"").replace(",","."));return isFinite(n)?n:0};
+const sizeLabel=w=>w>=1000?nf3.format(w/1000)+" кг":nf.format(w)+" г";
+const wt=g=>!isFinite(g)?"—":g>=1000?nf2.format(g/1000)+" кг":nf.format(Math.round(g))+" г";
+const pct=v=>(v>0?"+":v<0?"−":"")+nf1.format(Math.abs(v))+"%";
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const defaultPack=()=>({75:35,100:40,250:55,350:65,400:70,500:80,1000:120});
+const DEFAULT_COEF=2.5;
+const MANUAL="__manual__",NONE="__none__";
+
+/* строка рецепта: name, brutto (г), method (название или NONE/MANUAL), waste %, change %, price (₸ за 1 кг), auto (нормы подставляются сами) */
+function newRow(name="",brutto=0,price=""){const r={id:uid(),name,brutto,method:NONE,waste:0,change:0,price,auto:true,wNote:""};applyNorm(r);return r;}
+function applyNorm(r){
+  const p=findProduct(r.name);
+  if(!p){r.wNote="";if(r.auto){r.waste=0;r.wasteSrc="none";if(r.method!==MANUAL){r.method=NONE;r.change=0;r.changeSrc="zero";}}return;}
+  if(r.auto){
+    const w=p.w();r.waste=w?w.v:0;r.wasteSrc=w?"norm":"none";r.wNote=w&&w.s?w.s:"";
+    if(r.method!==NONE&&r.method!==MANUAL){const m=p.m.find(x=>x[0]===r.method);if(m){r.change=m[1];r.changeSrc="norm";}else{r.method=NONE;r.change=0;r.changeSrc="zero";}}
+    else if(r.method===NONE){r.change=0;r.changeSrc="zero";}
+  }
+}
+function sampleDish(){return {id:uid(),name:"Сладкая капуста",rows:[
+  newRow("Капуста белокочанная",5000,224),newRow("Перец сладкий",1000,1550),newRow("Морковь",1000,200),
+  newRow("Лук репчатый",1000,120),newRow("Подсолнечное масло",500,664),newRow("Соль",20,100)],
+  yieldOverride:"",target:1000,other:275,pack:defaultPack(),coef:DEFAULT_COEF};}
+
+/* перенос из прежней версии (foodcost.v2) — ничего не теряем */
+function fromOld(d){
+  const UNITS={"кг":1000,"г":1,"л":1000,"мл":1,"шт":0};
+  const nd={id:d.id||uid(),name:d.name||"",rows:[],yieldOverride:"",target:400,other:0,pack:Object.assign(defaultPack(),d.pack||{}),
+    coef:d.coef!==undefined?num(d.coef):(d.markup!==undefined?Math.round((1+num(d.markup)/100)*100)/100:DEFAULT_COEF),demo:!!d.demo};
+  const rec=d.recipe;
+  if(rec&&!rec.imported&&rec.items&&rec.items.length){
+    nd.rows=rec.items.map(i=>{const clean=Math.min(Math.max(num(i.clean),0),99),cook=Math.min(Math.max(num(i.cook),0),99);
+      const out=num(i.qty);const b=out/(1-cook/100)/(1-clean/100);
+      return {id:uid(),name:i.name||"",brutto:Math.round(b),method:cook>0?MANUAL:NONE,waste:clean,change:-cook,price:i.ppk===""?"":num(i.ppk),auto:false,wasteSrc:"manual",changeSrc:cook>0?"manual":"zero",wNote:""};});
+    nd.yieldOverride=num(rec.yield)>0?num(rec.yield):"";nd.target=num(rec.target)||400;
+  }else{
+    nd.rows=(d.items||[]).filter(i=>i.name||num(i.price)).map(i=>{const g=num(i.qty)*(UNITS[i.unit]??0);
+      return newRow(i.name,Math.round(g),g>0?Math.round(num(i.price)/g*1000):"");});
+    nd.target=rec&&num(rec.target)?num(rec.target):1000;
+  }
+  const r=calcDish(nd);
+  const oldW=num(d.weight)*1000;
+  nd.other=num(d.other)>0&&(oldW>0||r.base>0)?Math.round(num(d.other)/((oldW>0?oldW:r.base)/1000)):0;
+  if(!nd.rows.length)nd.rows=[newRow()];
+  return nd;
+}
+
+let store={dishes:[],currentId:null};
+function load(){
+  try{const raw=localStorage.getItem(KEY);if(raw){const s=JSON.parse(raw);if(s&&Array.isArray(s.dishes))store=s;}}catch(e){}
+  if(!store.dishes.length){
+    try{const raw=localStorage.getItem(OLD);if(raw){const s=JSON.parse(raw);
+      if(s&&Array.isArray(s.dishes)){const list=s.dishes.map(x=>x.id===(s.draft&&s.draft.id)?s.draft:x);
+        if(s.draft&&!list.find(x=>x.id===s.draft.id))list.unshift(s.draft);
+        store.dishes=list.map(fromOld);store.currentId=s.currentId;}}}catch(e){}
+  }
+  if(!store.dishes.length){const d=sampleDish();store.dishes=[d];store.currentId=d.id;}
+  store.dishes.forEach(d=>d.rows.forEach(r=>{if(r.auto)applyNorm(r);}));
+}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(store))}catch(e){}}
+let dish;
+const cur=()=>store.dishes.find(x=>x.id===store.currentId)||store.dishes[0];
+
+/* ================= РАСЧЁТ ================= */
+function calcRow(r){
+  const b=Math.max(num(r.brutto),0);
+  const w=Math.min(Math.max(num(r.waste),0),99);
+  const c=Math.max(num(r.change),-99);
+  const net=b*(1-w/100);
+  const out=net*(1+c/100);
+  const price=num(r.price);
+  return {b,w,c,net,out,cost:price>0?b/1000*price:null};
+}
+function calcDish(d){
+  const rows=d.rows.map(r=>({r,...calcRow(r)}));
+  const sumOut=rows.reduce((a,x)=>a+x.out,0);
+  const base=num(d.yieldOverride)>0?num(d.yieldOverride):sumOut;
+  const T=num(d.target);
+  const f=base>0?T/base:0;
+  const prodPerG=base>0?rows.reduce((a,x)=>a+(x.cost||0),0)/base:0;
+  const otherPerG=num(d.other)/1000;
+  const k=Math.max(num(d.coef),0);
+  const sizeCost=w=>prodPerG*w+otherPerG*w+(SIZES.includes(w)?num(d.pack[w]):0);
+  return {rows,sumOut,base,T,f,prodPerG,otherPerG,k,sizeCost,
+    missing:rows.filter(x=>x.r.name&&x.b>0&&x.cost===null).length};
+}
+
+/* ================= ОТРИСОВКА ================= */
+$("#prodList").innerHTML=P.map(p=>`<option value="${esc(p.n)}">`).join("");
+
+function methodOptions(r){
+  const p=findProduct(r.name);
+  let o=`<option value="${NONE}"${r.method===NONE?" selected":""}>Без варки и жарки</option>`;
+  if(p)o+=p.m.map(m=>`<option value="${esc(m[0])}"${r.method===m[0]?" selected":""}>${esc(m[0])} (${pct(m[1])})</option>`).join("");
+  o+=`<option value="${MANUAL}"${r.method===MANUAL?" selected":""}>Другое — указать вручную</option>`;
+  return o;
+}
+function tag(src){return src==="norm"?'<span class="tag norm">норма</span>':src==="manual"?'<span class="tag manual">вручную</span>':src==="none"?'<span class="tag none">нет нормы</span>':"";}
+function renderRows(){
+  $("#rows").innerHTML=dish.rows.map((r,i)=>`
+    <div class="row" data-id="${r.id}">
+      <div class="c-name"><label class="lbl" for="n-${r.id}">Продукт</label><input type="text" id="n-${r.id}" data-f="name" list="prodList" value="${esc(r.name)}" placeholder="Начните вводить: морковь…" autocomplete="off"></div>
+      <div class="c-method"><label class="lbl" for="m-${r.id}">Как готовят</label><select id="m-${r.id}" data-f="method">${methodOptions(r)}</select></div>
+      <div><label class="lbl" for="b-${r.id}">Сырого, г</label><input type="number" id="b-${r.id}" data-f="brutto" value="${r.brutto}" min="0" step="any" inputmode="decimal"></div>
+      <div><label class="lbl" for="p-${r.id}">₸ за 1 кг</label><input type="number" id="p-${r.id}" data-f="price" value="${r.price}" min="0" step="any" inputmode="decimal" placeholder="—"></div>
+      <div class="c-del"><button class="del" type="button" data-del="${r.id}" aria-label="Убрать продукт">×</button></div>
+      <div class="calc-line" id="cl-${r.id}"></div>
+      <div class="adv" id="adv-${r.id}" ${r.open?"":"hidden"}>
+        <div><label class="lbl" for="w-${r.id}">Отходы при чистке, %</label><input type="number" id="w-${r.id}" data-f="waste" value="${r.waste}" min="0" max="99" step="any" inputmode="decimal"></div>
+        <div><label class="lbl" for="c-${r.id}">Изменение веса при готовке, %</label><input type="number" id="c-${r.id}" data-f="change" value="${r.change}" min="-99" step="any" inputmode="decimal"></div>
+        <p>Минус — вес уменьшается (уварка, ужарка). Плюс — увеличивается (крупы, макароны). <button class="btn link small" type="button" data-reset="${r.id}">Вернуть нормы</button></p>
+      </div>
+    </div>`).join("");
+  dish.rows.forEach(updateRowLine);
+}
+function updateRowLine(r){
+  const el=document.getElementById("cl-"+r.id);if(!el)return;
+  const x=calcRow(r);
+  if(!(x.b>0)){el.innerHTML=`<span>Укажите вес сырого продукта</span>`;return;}
+  const parts=[`<span>Брутто <b>${wt(x.b)}</b></span>`,
+    `<span class="arrow">→</span><span>чистка ${x.w?"<b>−"+nf1.format(x.w)+"%</b>":"<b>0%</b>"} ${tag(r.wasteSrc)}${r.wNote&&r.wasteSrc==="norm"?` <span>(${esc(r.wNote)})</span>`:""}</span>`,
+    `<span class="arrow">→</span><span>нетто <b>${wt(x.net)}</b></span>`];
+  if(r.method!==NONE||x.c)parts.push(`<span class="arrow">→</span><span>готовка <b>${pct(x.c)}</b> ${tag(r.method===MANUAL?(r.changeSrc==="manual"?"manual":"none"):r.changeSrc)}</span>`);
+  parts.push(`<span class="arrow">→</span><span>выход <b>${wt(x.out)}</b></span>`);
+  parts.push(`<button class="btn link small" type="button" data-toggle="${r.id}">${r.open?"Скрыть %":"Изменить %"}</button>`);
+  el.innerHTML=parts.join("");
+}
+function renderDishSelect(){
+  $("#dishSelect").innerHTML=store.dishes.map(d=>`<option value="${d.id}"${d.id===dish.id?" selected":""}>${esc(d.name||"Без названия")}${d.demo?" (пример)":""}</option>`).join("");
+}
+function renderTargetChips(){
+  const t=num(dish.target);
+  $("#tChips").innerHTML=SIZES.map(w=>`<button class="chip" type="button" data-w="${w}" aria-pressed="${Math.abs(t-w)<0.5}">${sizeLabel(w)}</button>`).join("");
+}
+function renderPack(){
+  $("#packGrid").innerHTML=SIZES.map(w=>`<label for="pk-${w}">${sizeLabel(w)}<input type="number" id="pk-${w}" data-w="${w}" value="${dish.pack[w]??0}" min="0" step="1" inputmode="decimal"></label>`).join("");
+}
+function renderCoefChips(){
+  const k=num(dish.coef);
+  $("#coefChips").innerHTML=[1.5,2,2.5,3].map(v=>`<button class="chip" type="button" data-k="${v}" aria-pressed="${Math.abs(k-v)<1e-9}">× ${nf1.format(v)}</button>`).join("");
+}
+function renderAll(){
+  renderDishSelect();
+  $("#dishName").value=dish.name;
+  $("#target").value=num(dish.target)>0?nf3.format(num(dish.target)/1000).replace(/\s/g,""):"";
+  $("#yieldOverride").value=dish.yieldOverride;
+  $("#other").value=dish.other;
+  $("#coef").value=nf2.format(num(dish.coef)).replace(/\s/g,"");
+  renderRows();renderPack();update();
+}
+
+function update(){
+  const R=calcDish(dish);
+  const ok=R.base>0&&R.T>0;
+  $("#yieldInfo").innerHTML=R.base>0?`По рецепту выходит <b class="num">${wt(R.base)}</b>${num(dish.yieldOverride)>0?" (фактический вес)":""}`:"";
+  renderTargetChips();
+  const tl=R.T>0?wt(R.T):"—";
+  $("#buyFor").textContent=R.T>0?`на ${tl} готового`:"";
+  $("#costFor").textContent=R.T>0?`за ${tl}`:"";
+
+  const rows=R.rows.filter(x=>x.r.name||x.b>0);
+  $("#buyTbl").innerHTML=rows.length?rows.map(x=>`<tr><td>${esc(x.r.name||"Без названия")}</td><td><b>${ok?wt(Math.ceil(x.b*R.f)):"—"}</b></td><td>${ok&&x.cost!==null?money(x.cost*R.f):"—"}</td></tr>`).join("")
+    :`<tr><td colspan="3" style="color:var(--muted)">Добавьте продукты в рецепт</td></tr>`;
+  const prod=ok?R.prodPerG*R.T:0;
+  $("#buyTotal").textContent=ok?money(prod)+(R.missing?" *":""):"—";
+  $("#detailBody").innerHTML=rows.map(x=>`<tr><td>${esc(x.r.name||"—")}</td><td>${ok?wt(x.b*R.f):"—"}</td><td>${x.w?"−"+nf1.format(x.w)+"%":"0%"}</td><td>${ok?wt(x.net*R.f):"—"}</td><td>${pct(x.c)}</td><td>${ok?wt(x.out*R.f):"—"}</td></tr>`).join("");
+
+  const other=R.otherPerG*R.T;
+  const isSize=SIZES.includes(R.T);
+  const pack=isSize?num(dish.pack[R.T]):0;
+  const cost=prod+other+pack;
+  $("#cProducts").textContent=ok?money(prod):"—";
+  $("#cOther").textContent=ok?money(other):"—";
+  $("#cPackRow").hidden=!isSize;
+  $("#cPack").textContent=money(pack);
+  $("#cTotal").textContent=ok?money(cost):"—";
+  $("#perKg").textContent=ok?`Без упаковки 1 кг готового блюда обходится в ${money((R.prodPerG+R.otherPerG)*1000)}.`:"";
+
+  const k=R.k;
+  $("#coefWords").textContent=k>0?`Цена = себестоимость × ${nf2.format(k)}.`+(k>1?` Из каждой продажи вам остаётся ${nf.format((1-1/k)*100)}%.`:""):"Впишите коэффициент, например 2,5.";
+  renderCoefChips();
+  const price=cost*k, profit=price-cost;
+  $("#ansLabel").textContent=R.T>0?`Цена продажи за ${tl}`:"Цена продажи";
+  $("#ansPrice").textContent=ok&&k>0?money(price):"—";
+  $("#ansProfit").innerHTML=ok&&k>0?`Прибыль: <b>${money(profit)}</b>${R.T!==1000?` · это ${money(price/R.T*1000)} за 1 кг`:""}`:"";
+  $("#mBuy").textContent=ok?money(prod):"—";
+  $("#mLabel").textContent=R.T>0?`Цена за ${tl}`:"Цена";
+  $("#mPrice").textContent=ok&&k>0?money(price):"—";
+
+  let w="";
+  if(!(R.base>0))w="Добавьте продукты с весом сырого продукта — и всё посчитается.";
+  else if(!(R.T>0))w="Укажите, сколько нужно приготовить, в шаге 3.";
+  else if(R.missing)w=`* У ${R.missing} ${R.missing===1?"продукта":"продуктов"} не указана цена за 1 кг — себестоимость без них занижена.`;
+  else if(k<=0)w="Впишите коэффициент ценообразования, например 2,5.";
+  else if(k<1)w="Коэффициент меньше 1 — цена ниже себестоимости, продажа в убыток.";
+  else if(k===1)w="При коэффициенте 1 цена равна себестоимости — прибыли нет.";
+  else if(isSize&&pack>prod)w=`В размере ${tl} упаковка стоит дороже продуктов внутри. Маленькие упаковки приносят меньше денег с каждого грамма.`;
+  $("#warn").hidden=!w;$("#warn").textContent=w;
+
+  $("#sizesTbl").innerHTML=SIZES.map(s=>{const c=R.sizeCost(s),p=c*k;return `<tr data-w="${s}" class="${s===R.T?"sel":""}"><td>${sizeLabel(s)}</td><td>${R.base>0?money(c):"—"}</td><td>${R.base>0&&k>0?money(p):"—"}</td><td class="profit${p-c<0?" neg":""}">${R.base>0&&k>0?money(p-c):"—"}</td></tr>`}).join("");
+  save();
+}
+let saveT;
+function save(){const i=store.dishes.findIndex(x=>x.id===dish.id);if(i>=0)store.dishes[i]=dish;store.currentId=dish.id;persist();
+  clearTimeout(saveT);$("#savedNote").textContent="Сохранено";saveT=setTimeout(()=>$("#savedNote").textContent="Всё сохраняется автоматически",1500);}
+
+/* ================= СОБЫТИЯ ================= */
+function rowOf(e){const el=e.target.closest(".row");return el?dish.rows.find(x=>x.id===el.dataset.id):null;}
+$("#rows").addEventListener("input",e=>{
+  const r=rowOf(e);if(!r)return;const f=e.target.dataset.f;if(!f||f==="method")return;
+  r[f]=e.target.value;
+  if(f==="waste"){r.auto=false;r.wasteSrc="manual";r.wNote="";}
+  if(f==="change"){r.auto=false;r.changeSrc="manual";if(r.method===NONE){r.method=MANUAL;document.getElementById("m-"+r.id).value=MANUAL;}}
+  if(f==="name"){applyNorm(r);const sel=document.getElementById("m-"+r.id);sel.innerHTML=methodOptions(r);
+    document.getElementById("w-"+r.id).value=r.waste;document.getElementById("c-"+r.id).value=r.change;}
+  updateRowLine(r);update();
+});
+$("#rows").addEventListener("change",e=>{
+  const r=rowOf(e);if(!r||e.target.dataset.f!=="method")return;
+  r.method=e.target.value;
+  const p=findProduct(r.name);
+  if(r.method===NONE){r.change=0;r.changeSrc="zero";}
+  else if(r.method===MANUAL){r.changeSrc=r.changeSrc==="manual"?"manual":"none";r.open=true;document.getElementById("adv-"+r.id).hidden=false;}
+  else{const m=p&&p.m.find(x=>x[0]===r.method);if(m){r.change=m[1];r.changeSrc="norm";}}
+  document.getElementById("c-"+r.id).value=r.change;
+  updateRowLine(r);update();
+});
+$("#rows").addEventListener("click",e=>{
+  const del=e.target.closest("[data-del]");
+  if(del){dish.rows=dish.rows.filter(x=>x.id!==del.dataset.del);if(!dish.rows.length)dish.rows=[newRow()];renderRows();update();return;}
+  const tg=e.target.closest("[data-toggle]");
+  if(tg){const r=dish.rows.find(x=>x.id===tg.dataset.toggle);r.open=!r.open;document.getElementById("adv-"+r.id).hidden=!r.open;updateRowLine(r);save();return;}
+  const rs=e.target.closest("[data-reset]");
+  if(rs){const r=dish.rows.find(x=>x.id===rs.dataset.reset);r.auto=true;if(r.method===MANUAL)r.method=NONE;applyNorm(r);
+    document.getElementById("w-"+r.id).value=r.waste;document.getElementById("c-"+r.id).value=r.change;document.getElementById("m-"+r.id).innerHTML=methodOptions(r);
+    updateRowLine(r);update();toast(findProduct(r.name)?"Нормы восстановлены":"Для этого продукта нормы нет — укажите вручную");}
+});
+$("#addRow").addEventListener("click",()=>{const r=newRow();dish.rows.push(r);renderRows();update();document.getElementById("n-"+r.id)?.focus();});
+$("#tChips").addEventListener("click",e=>{const w=e.target.closest(".chip")?.dataset.w;if(!w)return;dish.target=+w;$("#target").value=nf3.format(w/1000).replace(/\s/g,"");update();});
+$("#target").addEventListener("input",e=>{e.target.value=e.target.value.replace(/[^\d.,]/g,"");dish.target=Math.round(num(e.target.value)*1000);update();});
+$("#sizesTbl").addEventListener("click",e=>{const w=e.target.closest("tr")?.dataset.w;if(!w)return;dish.target=+w;$("#target").value=nf3.format(w/1000).replace(/\s/g,"");update();});
+$("#dishName").addEventListener("input",e=>{dish.name=e.target.value;dish.demo=false;update();renderDishSelect();});
+$("#yieldOverride").addEventListener("input",e=>{dish.yieldOverride=e.target.value;update();});
+$("#other").addEventListener("input",e=>{dish.other=e.target.value;update();});
+$("#packGrid").addEventListener("input",e=>{const w=e.target.dataset.w;if(w){dish.pack[w]=e.target.value;update();}});
+$("#coef").addEventListener("input",e=>{e.target.value=e.target.value.replace(/[^\d.,]/g,"");dish.coef=num(e.target.value);update();});
+$("#coef").addEventListener("blur",e=>{if(e.target.value.trim()!=="")e.target.value=nf2.format(num(e.target.value)).replace(/\s/g,"");});
+function setCoef(v){dish.coef=Math.max(0,Math.round(v*100)/100);$("#coef").value=nf2.format(dish.coef).replace(/\s/g,"");update();}
+$("#coefMinus").addEventListener("click",()=>setCoef(num(dish.coef)-0.1));
+$("#coefPlus").addEventListener("click",()=>setCoef(num(dish.coef)+0.1));
+$("#coefChips").addEventListener("click",e=>{const k=e.target.closest("[data-k]")?.dataset.k;if(k)setCoef(+k);});
+
+$("#dishSelect").addEventListener("change",e=>{store.currentId=e.target.value;dish=cur();renderAll();persist();});
+$("#btnNew").addEventListener("click",()=>{
+  const d={id:uid(),name:"Новое блюдо",rows:[newRow()],yieldOverride:"",target:1000,other:dish?num(dish.other):0,pack:dish?Object.assign({},dish.pack):defaultPack(),coef:dish?num(dish.coef):DEFAULT_COEF};
+  store.dishes.unshift(d);store.currentId=d.id;dish=d;renderAll();$("#dishName").select();toast("Новое блюдо создано");
+});
+$("#btnDelete").addEventListener("click",e=>{
+  const b=e.currentTarget;
+  if(!b.dataset.confirm){b.dataset.confirm="1";b.textContent=`Точно удалить «${dish.name||"блюдо"}»?`;setTimeout(()=>{if(b.isConnected){delete b.dataset.confirm;b.textContent="Удалить это блюдо";}},4000);return;}
+  delete b.dataset.confirm;b.textContent="Удалить это блюдо";
+  store.dishes=store.dishes.filter(x=>x.id!==dish.id);
+  if(!store.dishes.length)store.dishes=[sampleDish()];
+  store.currentId=store.dishes[0].id;dish=cur();renderAll();toast("Блюдо удалено");
+});
+function toast(t){const el=$("#toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2200);}
+
+load();
+dish=cur();
+renderAll();
+window.__fc={calcDish,calcRow,findProduct,fromOld};
+})();
+</script>
+
+</body>
+</html>
